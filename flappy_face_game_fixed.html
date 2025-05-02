@@ -1,0 +1,246 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Flappy Face - Candy Edition</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #70c5ce;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background: #70c5ce;
+      touch-action: manipulation;
+    }
+
+    #startButton {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 14px 28px;
+      font-size: 20px;
+      background: linear-gradient(to right, #ff6ec4, #7873f5);
+      border: none;
+      border-radius: 14px;
+      color: white;
+      cursor: pointer;
+      z-index: 1;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+  <button id="startButton">Start Game</button>
+  <canvas id="gameCanvas" width="360" height="640"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const startButton = document.getElementById("startButton");
+
+    let frames = 0;
+    let gameStarted = false;
+    let score = 0;
+    let highScore = localStorage.getItem('flappyFaceHighScore') || 0;
+
+    const faceImage = new Image();
+    faceImage.src = "https://i.postimg.cc/tTZYgDz2/1000114070-removebg-preview.png";
+
+    const clouds = [
+      { x: 0, y: 40, speed: 0.5, size: 40 },
+      { x: 150, y: 100, speed: 0.3, size: 50 },
+      { x: 300, y: 60, speed: 0.4, size: 60 }
+    ];
+
+    const bird = {
+      x: 60,
+      y: 200,
+      width: 50,
+      height: 50,
+      gravity: 0.12,
+      jump: 3.8,
+      velocity: 0,
+      draw() {
+        ctx.drawImage(faceImage, this.x, this.y, this.width, this.height);
+      },
+      flap() {
+        this.velocity = -this.jump;
+      },
+      update() {
+        this.velocity += this.gravity;
+        this.y += this.velocity;
+        if (this.y + this.height >= canvas.height) {
+          this.y = canvas.height - this.height;
+          this.velocity = 0;
+          endGame();
+        }
+      },
+      reset() {
+        this.y = 200;
+        this.velocity = 0;
+      }
+    };
+
+    const pipes = {
+      position: [],
+      width: 60,
+      gap: 180,
+      dx: 2,
+      draw() {
+        for (let i = 0; i < this.position.length; i++) {
+          let p = this.position[i];
+          let gradient;
+
+          if (score >= 60) {
+            gradient = ctx.createLinearGradient(p.x, 0, p.x + this.width, 0);
+            gradient.addColorStop(0, "#d4af37");
+            gradient.addColorStop(1, "#ffd700");
+          } else if (score >= 40) {
+            gradient = ctx.createLinearGradient(p.x, 0, p.x + this.width, 0);
+            gradient.addColorStop(0, "#d7d7d7");
+            gradient.addColorStop(1, "#a9a9a9");
+          } else if (score >= 20) {
+            gradient = ctx.createLinearGradient(p.x, 0, p.x + this.width, 0);
+            gradient.addColorStop(0, "#89f7fe");
+            gradient.addColorStop(1, "#66a6ff");
+          } else {
+            gradient = ctx.createLinearGradient(p.x, 0, p.x + this.width, 0);
+            gradient.addColorStop(0, "#ff9a9e");
+            gradient.addColorStop(1, "#fad0c4");
+          }
+
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.roundRect(p.x, 0, this.width, p.height, 20);
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.roundRect(p.x, p.height + this.gap, this.width, canvas.height - (p.height + this.gap), 20);
+          ctx.fill();
+        }
+      },
+      update() {
+        if (frames % 100 === 0) {
+          const pipeTopHeight = Math.floor(Math.random() * (canvas.height / 2));
+          this.position.push({ x: canvas.width, height: pipeTopHeight });
+        }
+
+        for (let i = 0; i < this.position.length; i++) {
+          let p = this.position[i];
+          p.x -= this.dx;
+
+          if (
+            bird.x < p.x + this.width &&
+            bird.x + bird.width > p.x &&
+            (bird.y < p.height || bird.y + bird.height > p.height + this.gap)
+          ) {
+            endGame();
+          }
+
+          if (p.x + this.width < 0) {
+            this.position.shift();
+            score++;
+            if (score > highScore) {
+              highScore = score;
+              localStorage.setItem('flappyFaceHighScore', highScore);
+            }
+          }
+        }
+      },
+      reset() {
+        this.position = [];
+      }
+    };
+
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+      CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+        if (w < 2 * r) r = w / 2;
+        if (h < 2 * r) r = h / 2;
+        this.beginPath();
+        this.moveTo(x + r, y);
+        this.arcTo(x + w, y, x + w, y + h, r);
+        this.arcTo(x + w, y + h, x, y + h, r);
+        this.arcTo(x, y + h, x, y, r);
+        this.arcTo(x, y, x + w, y, r);
+        this.closePath();
+        return this;
+      };
+    }
+
+    function drawClouds() {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.font = "80px sans-serif";
+      for (let cloud of clouds) {
+        ctx.fillText("☁️", cloud.x, cloud.y);
+        cloud.x -= cloud.speed;
+        if (cloud.x + 80 < 0) {
+          cloud.x = canvas.width + Math.random() * 100;
+        }
+      }
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.fillStyle = "#70c5ce";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      drawClouds();
+      pipes.draw();
+      bird.draw();
+
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.fillText("Score: " + score, 10, 25);
+      ctx.fillText("High Score: " + highScore, 10, 50);
+    }
+
+    function update() {
+      bird.update();
+      pipes.update();
+    }
+
+    function loop() {
+      if (!gameStarted) return;
+      update();
+      draw();
+      frames++;
+      requestAnimationFrame(loop);
+    }
+
+    function endGame() {
+      gameStarted = false;
+      startButton.style.display = "block";
+    }
+
+    function startGame() {
+      bird.reset();
+      pipes.reset();
+      score = 0;
+      frames = 0;
+      gameStarted = true;
+      startButton.style.display = "none";
+      loop();
+    }
+
+    document.addEventListener("keydown", function (e) {
+      if (e.code === "Space" && gameStarted) bird.flap();
+    });
+
+    canvas.addEventListener("touchstart", function () {
+      if (gameStarted) bird.flap();
+    });
+
+    startButton.addEventListener("click", startGame);
+  </script>
+</body>
+</html>
